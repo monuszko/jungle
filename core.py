@@ -20,35 +20,57 @@ from __future__ import division, print_function
 
 DIRS = ((0, 1), (1, 0), (0, -1), (-1, 0))
 
-terrain = ['..^@^..',
-           '...^...',
-           '.......',
-           '.~~.~~.',
-           '.~~.~~.',
-           '.~~.~~.',
-           '.......',
-           '...^...',
-           '..^@^..']
+# Z - Black lair
+# z - White lair
 
 class Board:
-    def __init__(self, terrain):
-        self.terrain = terrain
+    def __init__(self):
+        self.terrain = ['..^Z^..',
+                        '...^...',
+                        '.......',
+                        '.~~.~~.',
+                        '.~~.~~.',
+                        '.~~.~~.',
+                        '.......',
+                        '...^...',
+                        '..^z^..']
         self.width = len(self.terrain[0])
         self.height = len(self.terrain)
         self.animals = dict()
-        self.turn = 'white'
+        self.turn = 'White'
 
+    def setup(self):
+
+        self.placeanimal((0, 0), JumpingAnimal('Lion', 7, 'Black'))
+        self.placeanimal((6, 0), JumpingAnimal('Tiger', 6, 'Black'))
+        self.placeanimal((1, 1), Animal('Dog', 3, 'Black'))
+        self.placeanimal((5, 1), Animal('Cat', 2, 'Black'))
+        self.placeanimal((0, 2), SwimmingAnimal('Rat', 1, 'Black'))
+        self.placeanimal((2, 2), Animal('Leopard', 5, 'Black'))
+        self.placeanimal((4, 2), Animal('Wolf', 4, 'Black'))
+        self.placeanimal((6, 2), Animal('Elephant', 8, 'Black'))
+
+        self.placeanimal((6, 8), JumpingAnimal('Lion', 7, 'White'))
+        self.placeanimal((0, 8), JumpingAnimal('Tiger', 6, 'White'))
+        self.placeanimal((5, 7), Animal('Dog', 3, 'White'))
+        self.placeanimal((1, 7), Animal('Cat', 2, 'White'))
+        self.placeanimal((6, 6), SwimmingAnimal('Rat', 1, 'White'))
+        self.placeanimal((4, 6), Animal('Leopard', 5, 'White'))
+        self.placeanimal((2, 6), Animal('Wolf', 4, 'White'))
+        self.placeanimal((0, 6), Animal('Elephant', 8, 'White'))
+        
     def __str__(self):
-        ret = ''
+        ret = []
         for y in range(self.height):
+            line = ''
             for x in range(self.width):
                 a = self.animals.get((x, y))
                 if a:
-                    ret += str(a.rank)
+                    line += str(a)
                 else:
-                    ret += self.terrain[y][x]
-            ret += '\n'
-        return ret
+                    line += self.terrain[y][x]
+            ret.append(line)
+        return '\n'.join(ret)
 
     def placeanimal(self, coords, animal):
         self.animals[coords] = animal
@@ -68,17 +90,24 @@ class Board:
         return self.terrain[coords[1]][coords[0]]
 
     def iswet(self, coords):
-        if self.terrain[coords[1]][coords[1]] == '~':
+        if self.getground(coords) == '~':
             return True
         return False
 
     def abylocation(self, coords):
         return self.animals[coords]
 
-    def abyrank(self, rank, color):
-        for v in self.animals.values():
-            if v.rank == rank and v.color == color:
-                return v
+    def abyrank(self, rank):
+        for a in self.animals.values():
+            if a.rank == rank and a.color == self.turn:
+                return a
+        return None
+
+    def abyglyph(self, glyph):
+        for a in self.animals.values():
+            if str(a) == glyph and a.color == self.turn:
+                return a
+        return None
 
     def moveanimal(self, start, dest):
         '''
@@ -87,8 +116,27 @@ class Board:
         self.animals[dest] = self.animals[start]
         self.animals[dest].pos = dest
         del self.animals[start]
-        self.turn = 'black' if self.animals[dest] == 'white' else 'white'
+        self.turn = 'Black' if self.animals[dest].color == 'White' else 'White'
 
+    def winner(self):
+        '''
+        Returns:
+        None if game is not yet finished
+        'Black' if Black has won, etc.
+        '''
+        for a in self.animals.values():
+            if self.getground(a.pos) in ('z', 'Z'): # Won by lair capture
+                return a.color
+
+        canmove = False
+        for a in self.animals.values():
+            if a.color == self.turn and a.allowedmoves(self):
+                canmove = True
+                break
+        if not canmove:
+            return 'White' if self.turn == 'Black' else 'Black'
+        
+        return None
 
 class Animal:
     def __init__(self, name, rank, color):
@@ -96,19 +144,31 @@ class Animal:
         self.rank  = rank
         self.color = color
         self.pos   = None
+        self.GLYPHS = 'abcdefgh' # For graphical representation
+
+    def __str__(self):
+        glyph = self.GLYPHS[self.rank - 1]
+        if self.color == 'White':
+            return glyph 
+        return glyph.upper() 
 
     def allowedmoves(self, board):
         '''
-        Start - coords from which the animal moves
+        Returns possible moves, taking color and capturing into account.
         '''
         accepted = []
         for dest in self.listmoves(board, self.pos):
             victim = board.animals.get(dest)
             if not victim:
+                g = board.getground(dest)
+                if self.color == 'White' and g == 'z':
+                    continue
+                if self.color == 'Black' and g == 'Z':
+                    continue
                 accepted.append(dest)
             elif self.color == victim.color:
                 continue
-            elif board.iswet(start) != board.iswet(dest):
+            elif board.iswet(self.pos) != board.iswet(dest):
                 continue # Attack only water->water or ground->ground
             elif board.getground(dest) == '^':
                 accepted.append(dest) # Anyone can kill a trapped animal
@@ -139,7 +199,6 @@ class Animal:
                 if board.getground(dest) == '~': # can't walk INTO water
                     continue
                 walkmoves.append(dest)
-        # TODO: make it impossible to walk into your own lair
         return walkmoves
 
 class SwimmingAnimal(Animal):
@@ -187,23 +246,9 @@ class JumpingAnimal(Animal):
         jumpmoves = []
         for di in DIRS:
             first = (start[0] + di[0], start[1] + di[1])
-            if board.getground(first) == '~':
+            if board.contains(first) and board.getground(first) == '~':
                 dest = self.jumpdest(board, first, di)
                 if dest is not None:
                     jumpmoves.append(dest)
-        print('jumps:', jumpmoves)
         return jumpmoves
 
-
-
-  
-if __name__ == '__main__':
-    pass
-
-b = Board(terrain)
-b.placeanimal((1, 4), SwimmingAnimal('Szczur', 1, 'black'))
-b.placeanimal((3, 4), JumpingAnimal('Kot', 2, 'black'))
-print(b)
-#a = b.abylocation((2, 6))
-a = b.abyrank(2, 'black')
-print(a.allowedmoves(b))
