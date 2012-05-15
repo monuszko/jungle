@@ -95,7 +95,9 @@ class Board:
         return False
 
     def abylocation(self, coords):
-        return self.animals[coords]
+        if coords in self.animals:
+            return self.animals[coords]
+        return None
 
     def abyrank(self, rank):
         for a in self.animals.values():
