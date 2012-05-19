@@ -2,9 +2,10 @@ from __future__ import division, print_function
 import urwid
 import core
 
-def show_or_exit(key):
-    if key in ('q', 'Q'):
-        raise urwid.ExitMainLoop()
+COLS = 7
+ROWS = 9
+# TODO: Try to remove globals
+
 
 legend = {
         '.': ('light green', 'dark green'), # grass
@@ -14,39 +15,56 @@ legend = {
         '~': ('light blue', 'dark blue') # water
         }
 
-class Viewport(urwid.WidgetWrap):
+class BoardSizer(urwid.Overlay):
+
+
+    def calculate_padding_filler(self, size, focus):
+        maxcol, maxrow = size
+        n = max(1, min(maxcol // COLS, maxrow // ROWS))
+        left = (maxcol - n * COLS) // 2
+        right = maxcol - n * COLS - left
+        top = (maxrow - n * ROWS) // 2
+        bottom = maxrow - n * ROWS - top
+        return [max(0, x) for x in (left, right, top, bottom)]
+
+class Display(urwid.WidgetWrap):
     '''
     The widget displaying the board.
     '''
-    def __init__(self, board):
-        self.board = board # The brain
+    def __init__(self, width, height, legend):
+        self.legend = legend
+
         lines = []
-        for y in range(self.board.height):
+        for y in range(height):
             row = []
-            for x in range(self.board.width):
-                glyph, fg, bg = self.looks(x, y, legend)
-                square = urwid.AttrMap(urwid.SolidFill(glyph), 
-                                                        urwid.AttrSpec(fg, bg))
+            for x in range(width):
+                square = urwid.AttrMap(urwid.SolidFill('x'), urwid.AttrSpec('default', 'default'))
                 row.append(square)
-            row = urwid.Columns([('fixed', 2, square) for square in row])
+            row = urwid.Columns(row)
             lines.append(row)
+        
+        grid = urwid.Pile(lines)
+        urwid.WidgetWrap.__init__(self, grid)
 
-        display_widget = urwid.Pile([('fixed', 2, line) for line in lines])
-        urwid.WidgetWrap.__init__(self, display_widget)
+    def update(self, board):
+        for y in range(board.height):
+            for x in range(board.width):
+                brush = self.looks(board, x, y)
+                self.paint(x, y, brush)
 
-    def looks(self, x, y, legend):
+    def looks(self, board, x, y):
         '''
         Returns a tuple (glyph, fg, bg)
         '''
-        animal = self.board.abylocation((x, y))
-        ground = self.board.getground((x, y))
-        bg = legend[ground][1]
+        animal = board.abylocation((x, y))
+        ground = board.getground((x, y))
+        bg = self.legend[ground][1]
         if animal is not None:
             glyph = str(animal.rank)
             fg = animal.color.lower()
         else:
-            glyph = self.board.getground((x, y))
-            fg = legend[ground][0]
+            glyph = board.getground((x, y))
+            fg = self.legend[ground][0]
         return (glyph, fg, bg)
 
     def paint(self, x, y, how):
@@ -58,11 +76,61 @@ class Viewport(urwid.WidgetWrap):
         self._w.widget_list[y].widget_list[x].set_attr_map(amap)
 
 
+class GameStateManager():
+    def __init__(self, board, display, mesg):
+        self.board = board
+        self.display = display
+        self.mesg = mesg
+        self.state = 'animal' 
+        self.actor = None # Which animal is currently moving
+        self.movekeys = 'abcd'
+    def handle_input(self, key):
+        if key in ('q', 'Q'):
+            raise urwid.ExitMainLoop()
+        if self.board.winner():
+            raise urwid.ExitMainLoop()
+        elif self.state == 'animal':
+            self.choose_animal(key)
+        elif self.state == 'destination':
+            self.choose_destination(key)
+    def choose_animal(self, key):
+        active = self.board.activeanimals()
+        for anim in active:
+            if str(anim.rank) == key:
+                self.state = 'destination'
+                self.actor = anim
+                self.paint_destinations()
+    def choose_destination(self, key):
+        if key == str(self.actor.rank):
+            self.state = 'animal'
+            self.display.update(self.board)
+            return
+        pass
+    def paint_destinations(self):
+        for move in zip(self.actor.allowedmoves(self.board), self.movekeys):
+            x, y = move[0]
+            self.mesg.set_text(str(move))
+            self.display.paint(x, y, ('!', 'white', 'dark red'))
 
-b = core.Board()
-b.setup()
-viewport = urwid.LineBox(Viewport(b))
+if __name__ == '__main__':
+    b = core.Board()
+    b.setup()
+    bg = urwid.SolidFill('`')
 
-fill = urwid.Filler(viewport)
-loop = urwid.MainLoop(fill, unhandled_input=show_or_exit)
-loop.run()
+    display = Display(COLS, ROWS, legend)
+    display.update(b)
+
+    header = urwid.Text('Jungle')
+    footer = urwid.Text('Messages')
+    topwidget = urwid.Frame(BoardSizer((display), bg, 'left', 1, 'top', 1),
+                            header=header,
+                            footer=footer
+                            )
+    #display.paint(2, 3, ('C', 'dark magenta', 'dark cyan'))
+
+    gsm = GameStateManager(b, display, footer)
+    loop = urwid.MainLoop(topwidget, unhandled_input=gsm.handle_input)
+    loop.run()
+
+
+print('{} player surrenders.'.format(b.turn))

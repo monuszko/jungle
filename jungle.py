@@ -71,7 +71,7 @@ def boardplusmoves(board, keymoves):
     return view
 
 def selectanimal(board, char):
-        a = b.abyglyph(char)
+        a = board.abyglyph(char)
         moves = a.allowedmoves(b)
         selectdestination(board, a, moves)
 
@@ -87,7 +87,7 @@ def selectdestination(board, animal, moves):
         char = getch()
     if char == str(animal):
         return
-    b.moveanimal(animal.pos, keymoves[char])
+    board.moveanimal(animal.pos, keymoves[char])
 
 getch = _Getch()
 

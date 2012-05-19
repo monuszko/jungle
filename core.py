@@ -101,7 +101,7 @@ class Board:
 
     def abyrank(self, rank):
         for a in self.animals.values():
-            if a.rank == rank and a.color == self.turn:
+            if a.rank == int(rank) and a.color == self.turn:
                 return a
         return None
 
@@ -139,6 +139,17 @@ class Board:
             return 'White' if self.turn == 'Black' else 'Black'
         
         return None
+
+    def activeanimals(self):
+        '''
+        Returns a list of animals allowed to move this turn
+        '''
+        active = []
+        for a in self.animals.values():
+            if a.color == self.turn and a.allowedmoves(self):
+                active.append(a)
+        return active
+
 
 class Animal:
     def __init__(self, name, rank, color):
