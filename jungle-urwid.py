@@ -17,7 +17,6 @@ legend = {
 
 class BoardSizer(urwid.Overlay):
 
-
     def calculate_padding_filler(self, size, focus):
         maxcol, maxrow = size
         n = max(1, min(maxcol // COLS, maxrow // ROWS))
@@ -50,7 +49,7 @@ class Display(urwid.WidgetWrap):
         for y in range(board.height):
             for x in range(board.width):
                 brush = self.looks(board, x, y)
-                self.paint(x, y, brush)
+                self.paint2(x, y, brush)
 
     def looks(self, board, x, y):
         '''
@@ -75,6 +74,16 @@ class Display(urwid.WidgetWrap):
         amap = {None: urwid.AttrSpec(how[1], how[2])}
         self._w.widget_list[y].widget_list[x].set_attr_map(amap)
 
+    def paint2(self, x, y, how):
+        '''
+        How - a tuple (glyph, fg, bg)
+        '''
+        square = urwid.AttrMap(urwid.SolidFill(how[0]), urwid.AttrSpec(how[1], how[2]))
+        self._w.widget_list[y].widget_list[x].original_widget = square
+
+
+
+
 
 class GameStateManager():
     def __init__(self, board, display, mesg):
@@ -84,11 +93,13 @@ class GameStateManager():
         self.state = 'animal' 
         self.actor = None # Which animal is currently moving
         self.movekeys = 'abcd'
+        self.moves = {}
+        self.winner = None
     def handle_input(self, key):
         if key in ('q', 'Q'):
             raise urwid.ExitMainLoop()
-        if self.board.winner():
-            raise urwid.ExitMainLoop()
+        if self.state == 'finished':
+            pass
         elif self.state == 'animal':
             self.choose_animal(key)
         elif self.state == 'destination':
@@ -103,14 +114,27 @@ class GameStateManager():
     def choose_destination(self, key):
         if key == str(self.actor.rank):
             self.state = 'animal'
-            self.display.update(self.board)
+            self.cleanup()
             return
-        pass
+        if key in self.moves:
+            start = self.actor.pos
+            target = self.moves[key]
+            self.board.moveanimal(start, target)
+            self.state = 'animal'
+            winner = self.board.winner()
+            if winner:
+                self.mesg.set_text('{} player wins the game.'.format(winner))
+                self.state = 'finished'
+            self.cleanup()
     def paint_destinations(self):
         for move in zip(self.actor.allowedmoves(self.board), self.movekeys):
             x, y = move[0]
-            self.mesg.set_text(str(move))
-            self.display.paint(x, y, ('!', 'white', 'dark red'))
+            self.display.paint2(x, y, (move[1], 'white', 'dark red'))
+            self.moves[move[1]] = move[0] # letter = (x, y)
+    def cleanup(self):
+        self.moves = {}
+        self.actor = None
+        self.display.update(self.board)
 
 if __name__ == '__main__':
     b = core.Board()
@@ -126,11 +150,10 @@ if __name__ == '__main__':
                             header=header,
                             footer=footer
                             )
-    #display.paint(2, 3, ('C', 'dark magenta', 'dark cyan'))
+    #display.paint2(2, 3, ('C', 'dark magenta', 'dark cyan'))
 
     gsm = GameStateManager(b, display, footer)
     loop = urwid.MainLoop(topwidget, unhandled_input=gsm.handle_input)
     loop.run()
+    display.paint2(2, 3, ('D', 'dark magenta', 'dark cyan'))
 
-
-print('{} player surrenders.'.format(b.turn))
