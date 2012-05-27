@@ -81,10 +81,6 @@ class Display(urwid.WidgetWrap):
         square = urwid.AttrMap(urwid.SolidFill(how[0]), urwid.AttrSpec(how[1], how[2]))
         self._w.widget_list[y].widget_list[x].original_widget = square
 
-
-
-
-
 class GameStateManager():
     def __init__(self, board, display, mesg):
         self.board = board
